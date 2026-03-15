@@ -47,15 +47,22 @@ class MainActivity: FlutterFragmentActivity() {
                     val paddedSerial = if (serialHexStr.length % 2 != 0) "0$serialHexStr" else serialHexStr
                     val serialFormat = paddedSerial.chunked(2).joinToString(":")
 
+                    // ¡MAGIA SIGECOF!: Detectamos si es RSA (256) o EC (512)
+                    val keyType = cert.publicKey.algorithm
+
                     result.success(mapOf(
                         "subject" to cert.subjectX500Principal.name, // Usamos formato estándar
                         "serial" to serialFormat, // Mandamos el serial real a Flutter
-                        "chain" to certList
+                        "chain" to certList,
+                        "keyType" to keyType // Mandamos el tipo de llave a Flutter
                     ))
                 } else if (call.method == "signECDSA") {
                     val data = call.argument<ByteArray>("data")
                     val privateKey = ks.getKey(alias, password.toCharArray()) as PrivateKey
-                    val sig = Signature.getInstance("SHA512withECDSA")
+                    
+                    // ¡MAGIA MATEMÁTICA!: Aplicamos la fórmula correcta según el tipo de llave
+                    val sigAlgo = if (privateKey.algorithm == "RSA") "SHA256withRSA" else "SHA512withECDSA"
+                    val sig = Signature.getInstance(sigAlgo)
                     
                     sig.initSign(privateKey)
                     sig.update(data)

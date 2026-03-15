@@ -9,6 +9,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const FirmadorMovilApp());
@@ -91,7 +92,8 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   List<List<int>>? _certificateChain;
   String _certFullSubject = '';
 
-  // --- VARIABLES DE BIOMETRÍA ---
+  String? _keyType;
+
   final LocalAuthentication auth = LocalAuthentication();
   final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
   bool _tieneHuellaGuardada = false;
@@ -113,7 +115,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     }
   }
 
-  // Verifica en el llavero seguro si este .p12 ya tiene contraseña guardada
   Future<void> _verificarHuellaGuardada(String rutaCert) async {
     String? pass = await secureStorage.read(key: rutaCert);
     setState(() {
@@ -159,6 +160,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         _certController.text = pathCertificado;
         _passController.clear();
         _puedeFirmar = false;
+        _keyType = null;
       });
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('ruta_certificado_p12', pathCertificado);
@@ -198,7 +200,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     return '';
   }
 
-  // --- LÓGICA DE AUTENTICACIÓN BIOMÉTRICA ---
   Future<void> _autenticarConHuella() async {
     try {
       bool autenticado = await auth.authenticate(
@@ -217,7 +218,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
           setState(() {
             _passController.text = passGuardada;
           });
-          // Si pasa la huella, validamos automáticamente contra la FII
           await _validarCertificado(omitirAlertaGuardado: true);
         }
       }
@@ -230,7 +230,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     }
   }
 
-  // Pregunta si desea guardar la clave en el llavero seguro
   void _preguntarGuardarHuella() {
     showDialog(
       context: context,
@@ -313,6 +312,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       if (nombrePropietario.isEmpty) nombrePropietario = 'Usuario FII';
 
       String serialReal = certInfo['serial'] ?? '';
+      _keyType = certInfo['keyType'] ?? '';
 
       List<dynamic> rawChain = certInfo['chain'];
       _certificateChain = rawChain
@@ -364,12 +364,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         } else if (estado == 'valid' || estado == 'good') {
           _mostrarAlerta(
             'Certificado Válido',
-            'Propietario: $nombrePropietario\nSerial: $serialReal\n\nEl certificado es válido y auténtico. ¡Puede firmar!',
+            'Propietario: $nombrePropietario\nSerial: $serialReal\nTipo: $_keyType\n\nEl certificado es válido y auténtico. ¡Puede firmar!',
             Colors.green,
           );
           setState(() => _puedeFirmar = true);
 
-          // Si la validación es exitosa y no tiene huella, le preguntamos si la quiere guardar
           if (!_tieneHuellaGuardada && !omitirAlertaGuardado) {
             Future.delayed(
               const Duration(seconds: 1),
@@ -426,10 +425,16 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         _certificateChain!,
       );
 
+      double startX = sigX! - (sigWidth / 2);
+      double startY = sigY! - (sigHeight / 2);
+
+      if (startX < 0) startX = 0;
+      if (startY < 0) startY = 0;
+
       final PdfSignatureField signatureField = PdfSignatureField(
         page,
         'Firma_SOFII_${DateTime.now().millisecondsSinceEpoch}',
-        bounds: Rect.fromLTWH(sigX!, sigY!, sigWidth, sigHeight),
+        bounds: Rect.fromLTWH(startX, startY, sigWidth, sigHeight),
       );
 
       String nombre = _extraerAtributo(_certFullSubject, 'CN');
@@ -448,7 +453,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       signatureField.appearance.normal.graphics?.drawString(
         textoVisual,
         PdfStandardFont(PdfFontFamily.helvetica, 11),
-        brush: PdfSolidBrush(PdfColor(0, 51, 153)),
+        brush: PdfSolidBrush(PdfColor(0, 0, 0)),
         bounds: Rect.fromLTWH(0, 0, sigWidth, sigHeight),
         format: PdfStringFormat(
           alignment: PdfTextAlignment.center,
@@ -461,6 +466,23 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
       final List<int> bytesFirmados = await document.save();
       document.dispose();
+
+      // --- ¡NUEVA LÓGICA DE PERMISOS AUTOMÁTICOS PARA ANDROID 11 a 15! ---
+      if (Platform.isAndroid) {
+        if (!await Permission.manageExternalStorage.isGranted) {
+          var status = await Permission.manageExternalStorage.request();
+          if (!status.isGranted) {
+            _mostrarAlerta(
+              'Permiso Denegado',
+              'Para guardar el PDF firmado, Android requiere que le dé permiso a la aplicación. Intente firmar nuevamente y acepte el permiso.',
+              Colors.red,
+            );
+            setState(() => _estaCargando = false);
+            return;
+          }
+        }
+      }
+      // -------------------------------------------------------------------
 
       Directory dirFirmados = Directory(
         '/storage/emulated/0/Download/Firmados',
@@ -478,7 +500,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
       setState(() {
         _puedeFirmar = false;
-        // Solo limpiamos la contraseña si no está usando biometría
         if (!_tieneHuellaGuardada) {
           _passController.clear();
         }
@@ -612,7 +633,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                     ),
                     const SizedBox(height: 20),
 
-                    // --- INTERFAZ CAMBIANTE SEGÚN LA BIOMETRÍA ---
                     const Text(
                       'Contraseña:',
                       style: TextStyle(fontWeight: FontWeight.bold),
@@ -661,27 +681,69 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
                     _estaCargando
                         ? const Center(child: CircularProgressIndicator())
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        : Column(
                             children: [
-                              // Si usa huella, escondemos el botón de validar normal porque la huella lo hace directo
-                              if (!_tieneHuellaGuardada)
-                                ElevatedButton.icon(
-                                  onPressed: _validarCertificado,
-                                  icon: const Icon(Icons.check_circle_outline),
-                                  label: const Text('Validar'),
-                                ),
-                              ElevatedButton.icon(
-                                onPressed: _puedeFirmar
-                                    ? _firmarDocumento
-                                    : null,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                ),
-                                icon: const Icon(Icons.edit_document),
-                                label: const Text('Firmar PDF'),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  if (!_tieneHuellaGuardada)
+                                    ElevatedButton.icon(
+                                      onPressed: _validarCertificado,
+                                      icon: const Icon(
+                                        Icons.check_circle_outline,
+                                      ),
+                                      label: const Text('Validar'),
+                                    ),
+                                  ElevatedButton.icon(
+                                    onPressed: _puedeFirmar
+                                        ? _firmarDocumento
+                                        : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    icon: const Icon(Icons.edit_document),
+                                    label: const Text('Firmar PDF'),
+                                  ),
+                                ],
                               ),
+                              if (_keyType == "RSA" && _puedeFirmar)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 20),
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    height: 50,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange.shade800,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Módulo de pagos SIGECOF en desarrollo...',
+                                            ),
+                                            backgroundColor: Colors.orange,
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.account_balance_wallet,
+                                      ),
+                                      label: const Text(
+                                        'Validar Pagos SIGECOF',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                   ],

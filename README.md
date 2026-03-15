@@ -14,19 +14,33 @@
 ### 📸 Interfaz de la Aplicación
 
 <p align="center">
+<<<<<<< HEAD
+  <img src="./screenshots/app_screenshot.png" alt="Interfaz del Firmador Móvil" width="300px">
+=======
   <img src="./screeshots/Sofii movil app.jpeg" alt="Interfaz del Firmador Móvil" width="300px">
+>>>>>>> 7981bf1 (Reemplazando el README de Flutter por la documentación oficial corporativa)
 </p>
 
 Desarrollada bajo una estricta arquitectura de seguridad **Zero-Trust** y cumplimiento de estándares criptográficos internacionales, garantiza la integridad, autenticidad y el no repudio de los documentos firmados.
 
 ## ✨ Características Principales
 
+<<<<<<< HEAD
+
 - **⚡ Firma On-Device:** El proceso criptográfico se ejecuta 100% localmente en el dispositivo. Las llaves privadas jamás viajan por la red.
 - **📂 Soporte PDF:** Selección e interacción nativa con documentos en formato PDF.
 - **🔑 Gestión de Certificados (.p12/.pfx):** Carga segura de certificados digitales estándar de la industria.
 - **☝️ Autenticación Biométrica:** Integración con el sensor de huellas dactilares del dispositivo para autorizar la firma y proteger las credenciales.
 - **🎯 Ubicación Visual Táctil:** El usuario decide exactamente dónde estampar la firma visual tocando la pantalla del visor PDF.
-- **🏷️ Extracción de Metadatos X.509:** Generación automática de sellos visuales extrayendo el Nombre, Organización y Cargo directamente de la data encriptada del certificado.
+- # **🏷️ Extracción de Metadatos X.509:** Generación automática de sellos visuales extrayendo el Nombre, Organización y Cargo directamente de la data encriptada del certificado.
+
+* **⚡ Firma On-Device:** El proceso criptográfico se ejecuta 100% localmente en el dispositivo. Las llaves privadas jamás viajan por la red.
+* **📂 Soporte PDF:** Selección e interacción nativa con documentos en formato PDF.
+* **🔑 Gestión de Certificados (.p12/.pfx):** Carga segura de certificados digitales estándar de la industria.
+* **☝️ Autenticación Biométrica:** Integración con el sensor de huellas dactilares del dispositivo para autorizar la firma y proteger las credenciales.
+* **🎯 Ubicación Visual Táctil:** El usuario decide exactamente dónde estampar la firma visual tocando la pantalla del visor PDF.
+* **🏷️ Extracción de Metadatos X.509:** Generación automática de sellos visuales extrayendo el Nombre, Organización y Cargo directamente de la data encriptada del certificado.
+  > > > > > > > 7981bf1 (Reemplazando el README de Flutter por la documentación oficial corporativa)
 
 ## 🛠️ Arquitectura y Tecnologías
 
@@ -35,6 +49,21 @@ La aplicación utiliza un enfoque **Híbrido/Nativo** para combinar la agilidad 
 ### El "Cómo" y el "Por Qué" Tecnológico
 
 #### 🟦 Frontend: Flutter (Dart)
+
+<<<<<<< HEAD
+Usamos 💙 **Flutter** para construir una interfaz de usuario (UI) fluida, moderna y reactiva. Flutter maneja toda la lógica de presentación, el visor de PDF táctil, la selección de archivos y la navegación.
+
+- **Ventaja:** Desarrollo rápido y una experiencia de usuario (UX) consistente y de alto rendimiento.
+
+#### 🤖 Backend Nativo: Kotlin (Android)
+
+Aquí está la "joya de la corona". Flutter, por sí solo, no tiene acceso directo a los motores criptográficos de bajo nivel del sistema operativo. Por lo tanto, creamos un motor criptográfico nativo en 💜 **Kotlin**.
+
+- **Ventaja:** Seguridad de grado militar. Usamos las APIs nativas de Android (`java.security`) que están respaldadas, en muchos casos, por hardware dedicado (Trusted Execution Environment - TEE).
+
+#### 🌉 El Puente: Method Channel
+
+=======
 
 Usamos 💙 **Flutter** para construir una interfaz de usuario (UI) fluida, moderna y reactiva. Flutter maneja toda la lógica de presentación, el visor de PDF táctil, la selección de archivos y la navegación.
 
@@ -48,7 +77,8 @@ Aquí está la "joya de la corona". Flutter, por sí solo, no tiene acceso direc
 
 #### 🌉 El Puente: Method Channel
 
-Flutter y Kotlin se comunican a través de un canal binario asíncrono seguro llamado **Method Channel**. Flutter envía el PDF y la clave encriptada a Kotlin; Kotlin "abre" la llave encriptada en la RAM protegida, firma el documento matemáticamente y devuelve el archivo firmado a Flutter.
+> > > > > > > 7981bf1 (Reemplazando el README de Flutter por la documentación oficial corporativa)
+> > > > > > > Flutter y Kotlin se comunican a través de un canal binario asíncrono seguro llamado **Method Channel**. Flutter envía el PDF y la clave encriptada a Kotlin; Kotlin "abre" la llave encriptada en la RAM protegida, firma el documento matemáticamente y devuelve el archivo firmado a Flutter.
 
 ## 🔐 Seguridad y Criptografía
 
