@@ -319,12 +319,42 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
           .map((e) => (e as Uint8List).toList())
           .toList();
 
-      final String ocspUrl =
-          "https://verificador.fii.gob.ve/ocspVerifySerial.php";
+      // --- ¡INICIO DE LA BIFURCACIÓN INTELIGENTE (ONCOP vs FII)! ---
+      String urlToUse;
+      String bodyData;
+
+      if (_keyType == "RSA") {
+        // LÓGICA ONCOP 256: Usamos la ruta nueva y armamos el bloque PEM
+        urlToUse = "https://verificador.fii.gob.ve/ocspVerify.php";
+
+        // Convertimos los bytes del certificado a Base64
+        String base64Cert = base64Encode(_certificateChain![0]);
+
+        // Le damos el formato PEM oficial (cortando en líneas de 64 caracteres)
+        String certPem = "-----BEGIN CERTIFICATE-----\n";
+        for (int i = 0; i < base64Cert.length; i += 64) {
+          certPem +=
+              base64Cert.substring(
+                i,
+                (i + 64 < base64Cert.length) ? i + 64 : base64Cert.length,
+              ) +
+              "\n";
+        }
+        certPem += "-----END CERTIFICATE-----\n";
+
+        // Codificamos el texto para enviarlo por HTTP (igual que el urlencoded.append de JS)
+        bodyData = "cert=${Uri.encodeComponent(certPem)}";
+      } else {
+        // LÓGICA FII 512: Usamos la ruta clásica y mandamos solo el serial
+        urlToUse = "https://verificador.fii.gob.ve/ocspVerifySerial.php";
+        bodyData = "serial=$serialReal";
+      }
+
       HttpClient client = HttpClient();
       client.badCertificateCallback =
           ((X509Certificate c, String host, int port) => true);
-      HttpClientRequest request = await client.postUrl(Uri.parse(ocspUrl));
+      // Usamos la URL dinámica que decidimos arriba
+      HttpClientRequest request = await client.postUrl(Uri.parse(urlToUse));
 
       request.headers.set(
         'SOFE_AUTH',
@@ -342,7 +372,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         preserveHeaderCase: true,
       );
 
-      request.write("serial=$serialReal");
+      // Escribimos el cuerpo de la petición dinámicamente (Serial o PEM)
+      request.write(bodyData);
+      // --- ¡FIN DE LA BIFURCACIÓN! ---
 
       HttpClientResponse response = await request.close().timeout(
         const Duration(seconds: 15),
