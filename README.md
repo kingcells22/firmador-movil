@@ -1,122 +1,75 @@
-# 📱 Firmador Móvil Criptográfico Zero-Trust
+# 📱 Sofii Móvil v2.0 - Ecosistema de Firma Digital y Pagos
+
+**Desarrollado por: Kenmerry Navarro ** _Ciberseguridad y Arquitectura de Software_
 
 <p align="center">
   <img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter">
   <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
-  <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
   <img src="https://img.shields.io/badge/Cryptography-🔐-yellow?style=for-the-badge" alt="Cryptography">
+  <img src="https://img.shields.io/badge/Security-Zero--Trust-black?style=for-the-badge" alt="Zero-Trust">
 </p>
 
 ## 📄 Descripción General
 
-**Firmador Móvil** es una solución de software de vanguardia diseñada para la gestión documental segura en dispositivos móviles. Esta aplicación permite a la **Alta Gerencia** y personal autorizado estampar firmas electrónicas con **plena validez legal** directamente desde su teléfono inteligente Android, eliminando la dependencia de equipos de escritorio.
+**Sofii Móvil** es una solución de vanguardia diseñada para la gestión documental segura. Esta aplicación permite a la **Alta Gerencia** y personal autorizado estampar firmas electrónicas con **plena validez legal** directamente desde su smartphone, optimizando los flujos de trabajo institucionales.
 
 ### 📸 Interfaz de la Aplicación
 
 <p align="center">
-<<<<<<< HEAD
-  <img src="./screenshots/app_screenshot.png" alt="Interfaz del Firmador Móvil" width="300px">
-=======
-  <img src="./screeshots/Sofii movil app.jpeg" alt="Interfaz del Firmador Móvil" width="300px">
->>>>>>> 7981bf1 (Reemplazando el README de Flutter por la documentación oficial corporativa)
+  <img src="https://files.oaiusercontent.com/file-6lY3P9WjDovr0N9f2W48Dq9W" alt="Interfaz de Sofii Móvil v2.0" width="350px">
 </p>
 
-Desarrollada bajo una estricta arquitectura de seguridad **Zero-Trust** y cumplimiento de estándares criptográficos internacionales, garantiza la integridad, autenticidad y el no repudio de los documentos firmados.
+---
 
-## ✨ Características Principales
+## ✨ Características Principales (v2.0)
 
-<<<<<<< HEAD
+- **⚡ Firma Multialgoritmo:** Soporte nativo para certificados **ECDSA (curva elíptica)** y **RSA (2048/4096 bits)**, garantizando compatibilidad con cualquier Autoridad de Certificación.
+- **📦 Firma en Lote (Masiva):** Capacidad para seleccionar múltiples PDFs y firmarlos secuencialmente en un solo proceso.
+- **🖼️ Estampa Visual Personalizada:** Permite cargar una imagen (sello o firma manuscrita) y ubicarla táctilmente en el documento.
+- **☝️ Biometría Inteligente:** Tras la primera validación, el app cifra las credenciales en el hardware seguro (`Keystore`) para permitir firmas futuras solo con la huella dactilar.
+- **💳 Módulo SIGECOF (Beta):** Integración preparada para el sistema de pagos SIGECOF. _Nota: Pendiente de configuración de rutas finales por parte del ente rector._
 
-- **⚡ Firma On-Device:** El proceso criptográfico se ejecuta 100% localmente en el dispositivo. Las llaves privadas jamás viajan por la red.
-- **📂 Soporte PDF:** Selección e interacción nativa con documentos en formato PDF.
-- **🔑 Gestión de Certificados (.p12/.pfx):** Carga segura de certificados digitales estándar de la industria.
-- **☝️ Autenticación Biométrica:** Integración con el sensor de huellas dactilares del dispositivo para autorizar la firma y proteger las credenciales.
-- **🎯 Ubicación Visual Táctil:** El usuario decide exactamente dónde estampar la firma visual tocando la pantalla del visor PDF.
-- # **🏷️ Extracción de Metadatos X.509:** Generación automática de sellos visuales extrayendo el Nombre, Organización y Cargo directamente de la data encriptada del certificado.
+---
 
-* **⚡ Firma On-Device:** El proceso criptográfico se ejecuta 100% localmente en el dispositivo. Las llaves privadas jamás viajan por la red.
-* **📂 Soporte PDF:** Selección e interacción nativa con documentos en formato PDF.
-* **🔑 Gestión de Certificados (.p12/.pfx):** Carga segura de certificados digitales estándar de la industria.
-* **☝️ Autenticación Biométrica:** Integración con el sensor de huellas dactilares del dispositivo para autorizar la firma y proteger las credenciales.
-* **🎯 Ubicación Visual Táctil:** El usuario decide exactamente dónde estampar la firma visual tocando la pantalla del visor PDF.
-* **🏷️ Extracción de Metadatos X.509:** Generación automática de sellos visuales extrayendo el Nombre, Organización y Cargo directamente de la data encriptada del certificado.
-  > > > > > > > 7981bf1 (Reemplazando el README de Flutter por la documentación oficial corporativa)
+## 🚀 Guía de Uso para el Usuario
 
-## 🛠️ Arquitectura y Tecnologías
+### 1. Instalación y Permisos
 
-La aplicación utiliza un enfoque **Híbrido/Nativo** para combinar la agilidad de desarrollo con la seguridad de bajo nivel.
+1. Descargue el archivo **`Sofii Movil.apk`**.
+2. Si el sistema bloquea la instalación, vaya a **Ajustes > Seguridad** y active **"Instalar aplicaciones de orígenes desconocidos"**.
+3. Si ya tiene una versión anterior, instale encima para **actualizar** sin perder sus datos.
 
-### El "Cómo" y el "Por Qué" Tecnológico
+### 2. Proceso de Firma
 
-#### 🟦 Frontend: Flutter (Dart)
+- **Selección:** Use el ícono de **PDF** para cargar uno o varios archivos.
+- **Certificado:** Cargue su archivo `.p12` o `.pfx` y valide su contraseña.
+- **Firma con Imagen:** (Opcional) Cargue su sello y toque el visor para posicionarlo.
+- **Ejecución:** Presione **"Firmar PDF"** (o "Firmar Lote" si son varios).
 
-<<<<<<< HEAD
-Usamos 💙 **Flutter** para construir una interfaz de usuario (UI) fluida, moderna y reactiva. Flutter maneja toda la lógica de presentación, el visor de PDF táctil, la selección de archivos y la navegación.
+### 3. Ubicación de Archivos
 
-- **Ventaja:** Desarrollo rápido y una experiencia de usuario (UX) consistente y de alto rendimiento.
+Todos los documentos firmados se guardan automáticamente en:  
+`📁 Almacenamiento Interno > Download > Firmados`.
 
-#### 🤖 Backend Nativo: Kotlin (Android)
+---
 
-Aquí está la "joya de la corona". Flutter, por sí solo, no tiene acceso directo a los motores criptográficos de bajo nivel del sistema operativo. Por lo tanto, creamos un motor criptográfico nativo en 💜 **Kotlin**.
+## 🛠️ Arquitectura Técnica
 
-- **Ventaja:** Seguridad de grado militar. Usamos las APIs nativas de Android (`java.security`) que están respaldadas, en muchos casos, por hardware dedicado (Trusted Execution Environment - TEE).
+### Seguridad "Zero-Trust" en el Dispositivo
 
-#### 🌉 El Puente: Method Channel
+1. **Frontend (Flutter):** Maneja la UI y el visor táctil.
+2. **Puente (Method Channel):** Envía datos de forma binaria y asíncrona al núcleo nativo.
+3. **Core Nativo (Kotlin):** Realiza el cálculo matemático de la firma dentro del **TEE (Trusted Execution Environment)** de Android. La clave privada nunca se expone fuera de la memoria volátil protegida.
 
-=======
+### Especificaciones de Criptografía
 
-Usamos 💙 **Flutter** para construir una interfaz de usuario (UI) fluida, moderna y reactiva. Flutter maneja toda la lógica de presentación, el visor de PDF táctil, la selección de archivos y la navegación.
-
-- **Ventaja:** Desarrollo rápido y una experiencia de usuario (UX) consistente y de alto rendimiento.
-
-#### 🤖 Backend Nativo: Kotlin (Android)
-
-Aquí está la "joya de la corona". Flutter, por sí solo, no tiene acceso directo a los motores criptográficos de bajo nivel del sistema operativo. Por lo tanto, creamos un motor criptográfico nativo en 💜 **Kotlin**.
-
-- **Ventaja:** Seguridad de grado militar. Usamos las APIs nativas de Android (`java.security`) que están respaldadas, en muchos casos, por hardware dedicado (Trusted Execution Environment - TEE).
-
-#### 🌉 El Puente: Method Channel
-
-> > > > > > > 7981bf1 (Reemplazando el README de Flutter por la documentación oficial corporativa)
-> > > > > > > Flutter y Kotlin se comunican a través de un canal binario asíncrono seguro llamado **Method Channel**. Flutter envía el PDF y la clave encriptada a Kotlin; Kotlin "abre" la llave encriptada en la RAM protegida, firma el documento matemáticamente y devuelve el archivo firmado a Flutter.
-
-## 🔐 Seguridad y Criptografía
-
-- 🛡️ **Motor Criptográfico:** Implementación estricta de Curve Elíptica (ECDSA) con algoritmos de hashing SHA-512 y SHA-256 para máxima seguridad.
-- 🔒 **Zero-Trust Arquitectura:** La contraseña del certificado (.p12) se captura en vivo, se usa en la memoria volátil y se destruye inmediatamente después del proceso matemático de firma. Nada se guarda desprotegido en el disco.
-- 🔐 **Secure Storage:** Cuando el usuario activa la biometría, la contraseña del certificado se guarda encriptada en el llavero de hardware seguro de Android (`Keystore`) usando AES-256, protegido por la huella dactilar del usuario.
-
-## 🚀 Guía de Uso Rápido
-
-### Preparación
-
-1.  **Instalación 📱:** Descargue e instale el archivo **`Sofii-Movil.apk`** en su dispositivo Android.
-2.  **Permisos:** Permita la instalación de aplicaciones desconocidas si el sistema se lo solicita.
-
-### Flujo de Firma
-
-1.  **📄 Seleccionar PDF:** Abra la app, presione el ícono rojo de PDF y busque el documento a firmar.
-2.  **🎯 Ubicar Firma:** Toque la pantalla sobre el visor PDF donde desea que aparezca el sello visual y presione "Aceptar".
-3.  **🔑 Cargar Certificado:** Presione el ícono naranja de la llave y busque su archivo de firma electrónica (`.p12`).
-4.  **🔓 Validar y Firmar:**
-    - Si es la primera vez, ingrese la contraseña y presione **Validar**.
-    - Si ya configuró la biometría, simplemente **toque el sensor de huella dactilar**.
-5.  **✍️ Firmar PDF:** Una vez validado el certificado, el botón azul de "Firmar PDF" se habilitará. Presiónelo.
-6.  **💾 Archivo Final:** ¡Listo! Su documento firmado se guardará automáticamente en la carpeta `Descargas > Firmados` de su teléfono.
-
-## 🏆 Ventajas Competitivas
-
-| Ventaja                | Descripción                                                                                  |
-| :--------------------- | :------------------------------------------------------------------------------------------- |
-| **Seguridad Militar**  | Protección de llaves privadas respaldada por hardware nativo de Android.                     |
-| **Usabilidad Premium** | Firma con huella dactilar en 5 segundos. Experiencia de usuario bancaria.                    |
-| **Validez Legal**      | Cumplimiento de algoritmos internacionales ECDSA/SHA-512 para el no repudio.                 |
-| **Movilidad Total**    | Firme contratos, memorándums y autorizaciones desde cualquier lugar, sin depender de una PC. |
+- **Algoritmos:** ECDSA con SHA-512 / RSA con SHA-256.
+- **Resguardo:** Encriptación de contraseñas mediante **AES-256-GCM** vinculada a la biometría del hardware.
 
 ---
 
 <p align="center">
-Desarrollado y Mantenido por<br>
-<b>Kenmerry Navarro (kingcells22)</b><br>
-Ciberseguridad y Arquitectura de Software
+  <b>Kenmerry Jemahel Navarro Ayala</b><br>
+  <i>Coordinador de Tecnología / Especialista en PKI y Seguridad</i><br>
+  FIIIDT
 </p>
