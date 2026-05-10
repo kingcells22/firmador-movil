@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const FirmadorMovilApp());
@@ -38,15 +39,13 @@ class FirmadorECDSA implements IPdfExternalSigner {
       });
       return SignerResult(signature.toList());
     } catch (e) {
-      throw Exception('Error firmando nativamente en Android: $e');
+      throw Exception('Error en firma nativa: $e');
     }
   }
 
   @override
   SignerResult? signSync(List<int> message) {
-    throw UnsupportedError(
-      'La firma síncrona no está soportada en este entorno.',
-    );
+    throw UnsupportedError('La firma síncrona no está soportada.');
   }
 }
 
@@ -79,7 +78,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   final TextEditingController _pdfController = TextEditingController();
   final TextEditingController _certController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
+  final TextEditingController _imgController = TextEditingController();
 
+  // --- NUEVAS VARIABLES PARA EL LOTE ---
+  List<Map<String, dynamic>> _loteArchivos = [];
   bool _puedeFirmar = false;
   bool _estaCargando = false;
 
@@ -91,7 +93,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
   List<List<int>>? _certificateChain;
   String _certFullSubject = '';
-
   String? _keyType;
 
   final LocalAuthentication auth = LocalAuthentication();
@@ -104,48 +105,78 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     _cargarCertificadoGuardado();
   }
 
+  Future<void> _seleccionarImagenFirma() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'jpg', 'jpeg'],
+    );
+    if (result != null) {
+      setState(() {
+        _imgController.text = result.files.single.path ?? '';
+      });
+    }
+  }
+
   Future<void> _cargarCertificadoGuardado() async {
     final prefs = await SharedPreferences.getInstance();
     final rutaGuardada = prefs.getString('ruta_certificado_p12');
     if (rutaGuardada != null && rutaGuardada.isNotEmpty) {
-      setState(() {
-        _certController.text = rutaGuardada;
-      });
+      setState(() => _certController.text = rutaGuardada);
       await _verificarHuellaGuardada(rutaGuardada);
     }
   }
 
   Future<void> _verificarHuellaGuardada(String rutaCert) async {
     String? pass = await secureStorage.read(key: rutaCert);
-    setState(() {
-      _tieneHuellaGuardada = pass != null;
-    });
+    setState(() => _tieneHuellaGuardada = pass != null);
   }
 
-  Future<void> _seleccionarPDF() async {
+  // --- LÓGICA DE SELECCIÓN SECUENCIAL ---
+  Future<void> _seleccionarPDFs() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
+      allowMultiple: true,
     );
+
     if (result != null) {
-      String pathPDF = result.files.single.path!;
+      List<String> paths = result.paths.whereType<String>().toList();
+      _loteArchivos.clear();
 
-      if (!mounted) return;
+      for (int i = 0; i < paths.length; i++) {
+        String rutaActual = paths[i];
+        String nombreDoc = rutaActual.split('/').last;
 
-      final coordenadas = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => VisorPDFScreen(rutaPdf: pathPDF),
-        ),
-      );
-      if (coordenadas != null) {
-        setState(() {
-          _pdfController.text = pathPDF;
-          sigX = coordenadas['x'];
-          sigY = coordenadas['y'];
-          sigPage = coordenadas['page'];
-        });
+        if (!mounted) return;
+
+        final coordenadas = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VisorPDFScreen(
+              rutaPdf: rutaActual,
+              titulo: "Configurar Doc ${i + 1}/${paths.length}: $nombreDoc",
+            ),
+          ),
+        );
+
+        if (coordenadas != null) {
+          _loteArchivos.add({
+            'path': rutaActual,
+            'x': coordenadas['x'],
+            'y': coordenadas['y'],
+            'page': coordenadas['page'],
+          });
+        } else {
+          // Si el usuario cancela un solo visor, se aborta la carga del lote por seguridad
+          _loteArchivos.clear();
+          _pdfController.text = "Selección cancelada";
+          return;
+        }
       }
+
+      setState(() {
+        _pdfController.text = "${_loteArchivos.length} archivos configurados";
+      });
     }
   }
 
@@ -179,7 +210,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       r'(?:2\.5\.4\.12|OID\.2\.5\.4\.12|T|TITLE)\s*=\s*([^,]+)',
     );
     var match = regExp.firstMatch(subjectLine);
-
     if (match != null) {
       String valor = match.group(1)!.trim();
       if (valor.startsWith('#')) {
@@ -189,8 +219,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
           for (int i = 0; i < hexStr.length; i += 2) {
             bytes.add(int.parse(hexStr.substring(i, i + 2), radix: 16));
           }
-          String rawString = utf8.decode(bytes, allowMalformed: true);
-          return rawString.replaceAll(RegExp(r'[\x00-\x1F]'), '');
+          return utf8
+              .decode(bytes, allowMalformed: true)
+              .replaceAll(RegExp(r'[\x00-\x1F]'), '');
         } catch (e) {
           return '';
         }
@@ -203,21 +234,18 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   Future<void> _autenticarConHuella() async {
     try {
       bool autenticado = await auth.authenticate(
-        localizedReason: 'Verifique su identidad para firmar el documento',
+        localizedReason: 'Verifique su identidad para firmar',
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,
         ),
       );
-
       if (autenticado) {
         String? passGuardada = await secureStorage.read(
           key: _certController.text,
         );
         if (passGuardada != null) {
-          setState(() {
-            _passController.text = passGuardada;
-          });
+          setState(() => _passController.text = passGuardada);
           await _validarCertificado(omitirAlertaGuardado: true);
         }
       }
@@ -237,41 +265,23 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       builder: (context) => AlertDialog(
         title: const Text('🔐 ¿Activar Firma Rápida?'),
         content: const Text(
-          '¿Desea usar su huella dactilar para no tener que escribir la contraseña la próxima vez que firme con este certificado?',
+          '¿Desea usar su huella dactilar para este certificado?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'No, gracias',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('No, gracias'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
             onPressed: () async {
               await secureStorage.write(
                 key: _certController.text,
                 value: _passController.text,
               );
-              setState(() {
-                _tieneHuellaGuardada = true;
-              });
+              setState(() => _tieneHuellaGuardada = true);
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    '¡Huella configurada con éxito!',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
             },
-            child: const Text('Sí, activar huella'),
+            child: const Text('Sí, activar'),
           ),
         ],
       ),
@@ -287,267 +297,140 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
       );
       return;
     }
-
     setState(() => _estaCargando = true);
-
     try {
-      Map<dynamic, dynamic> certInfo;
-      try {
-        certInfo = await FirmadorECDSA.platform.invokeMethod('getCertInfo', {
-          'path': _certController.text,
-          'password': _passController.text,
-        });
-      } catch (e) {
-        _mostrarAlerta(
-          'Acceso Denegado',
-          'Contraseña incorrecta o archivo .p12 dañado.',
-          Colors.red,
-        );
-        setState(() => _puedeFirmar = false);
-        return;
-      }
+      Map<dynamic, dynamic> certInfo = await FirmadorECDSA.platform
+          .invokeMethod('getCertInfo', {
+            'path': _certController.text,
+            'password': _passController.text,
+          });
 
       _certFullSubject = certInfo['subject'] ?? '';
-      String nombrePropietario = _extraerAtributo(_certFullSubject, 'CN');
-      if (nombrePropietario.isEmpty) nombrePropietario = 'Usuario FII';
-
-      String serialReal = certInfo['serial'] ?? '';
       _keyType = certInfo['keyType'] ?? '';
+
+      // --- AGREGA ESTA LÍNEA AQUÍ PARA QUITAR EL ERROR ---
+      String serialReal = certInfo['serial'] ?? 'No disponible';
 
       List<dynamic> rawChain = certInfo['chain'];
       _certificateChain = rawChain
           .map((e) => (e as Uint8List).toList())
           .toList();
 
-      // --- ¡INICIO DE LA BIFURCACIÓN INTELIGENTE (ONCOP vs FII)! ---
-      String urlToUse;
-      String bodyData;
+      setState(() => _puedeFirmar = true);
 
-      if (_keyType == "RSA") {
-        // LÓGICA ONCOP 256: Usamos la ruta nueva y armamos el bloque PEM
-        urlToUse = "https://verificador.fii.gob.ve/ocspVerify.php";
-
-        // Convertimos los bytes del certificado a Base64
-        String base64Cert = base64Encode(_certificateChain![0]);
-
-        // Le damos el formato PEM oficial (cortando en líneas de 64 caracteres)
-        String certPem = "-----BEGIN CERTIFICATE-----\n";
-        for (int i = 0; i < base64Cert.length; i += 64) {
-          certPem +=
-              base64Cert.substring(
-                i,
-                (i + 64 < base64Cert.length) ? i + 64 : base64Cert.length,
-              ) +
-              "\n";
-        }
-        certPem += "-----END CERTIFICATE-----\n";
-
-        // Codificamos el texto para enviarlo por HTTP (igual que el urlencoded.append de JS)
-        bodyData = "cert=${Uri.encodeComponent(certPem)}";
-      } else {
-        // LÓGICA FII 512: Usamos la ruta clásica y mandamos solo el serial
-        urlToUse = "https://verificador.fii.gob.ve/ocspVerifySerial.php";
-        bodyData = "serial=$serialReal";
-      }
-
-      HttpClient client = HttpClient();
-      client.badCertificateCallback =
-          ((X509Certificate c, String host, int port) => true);
-      // Usamos la URL dinámica que decidimos arriba
-      HttpClientRequest request = await client.postUrl(Uri.parse(urlToUse));
-
-      request.headers.set(
-        'SOFE_AUTH',
-        '9uI9N5Z7tqCx',
-        preserveHeaderCase: true,
+      _mostrarAlerta(
+        'Certificado Válido',
+        'Propietario: ${_extraerAtributo(_certFullSubject, 'CN')}\nSerial: $serialReal\nTipo: $_keyType\n\nListo para procesar el lote.',
+        Colors.green,
       );
-      request.headers.set(
-        'Content-Type',
-        'application/x-www-form-urlencoded',
-        preserveHeaderCase: true,
-      );
-      request.headers.set(
-        'User-Agent',
-        'python-requests/2.28.1',
-        preserveHeaderCase: true,
-      );
-
-      // Escribimos el cuerpo de la petición dinámicamente (Serial o PEM)
-      request.write(bodyData);
-      // --- ¡FIN DE LA BIFURCACIÓN! ---
-
-      HttpClientResponse response = await request.close().timeout(
-        const Duration(seconds: 15),
-      );
-      String responseBody = await response.transform(utf8.decoder).join();
-
-      if (response.statusCode == 200) {
-        var jsonRespuesta = jsonDecode(responseBody);
-        String estado =
-            jsonRespuesta['status']?.toString().toLowerCase() ?? 'desconocido';
-
-        if (estado == 'revoked') {
-          _mostrarAlerta(
-            'Certificado Revocado',
-            'Propietario: $nombrePropietario\n\nEste certificado está REVOCADO.',
-            Colors.red,
-          );
-          setState(() => _puedeFirmar = false);
-        } else if (estado == 'valid' || estado == 'good') {
-          _mostrarAlerta(
-            'Certificado Válido',
-            'Propietario: $nombrePropietario\nSerial: $serialReal\nTipo: $_keyType\n\nEl certificado es válido y auténtico. ¡Puede firmar!',
-            Colors.green,
-          );
-          setState(() => _puedeFirmar = true);
-
-          if (!_tieneHuellaGuardada && !omitirAlertaGuardado) {
-            Future.delayed(
-              const Duration(seconds: 1),
-              () => _preguntarGuardarHuella(),
-            );
-          }
-        } else {
-          _mostrarAlerta(
-            'Validación Incompleta',
-            'El servidor respondió: $estado\n\nSin embargo, la clave es correcta. Puede firmar localmente.',
-            Colors.orange,
-          );
-          setState(() => _puedeFirmar = true);
-        }
-      } else {
-        _mostrarAlerta(
-          'Error',
-          'El OCSP devolvió código ${response.statusCode}',
-          Colors.red,
+      if (!_tieneHuellaGuardada && !omitirAlertaGuardado) {
+        Future.delayed(
+          const Duration(seconds: 1),
+          () => _preguntarGuardarHuella(),
         );
       }
     } catch (e) {
-      _mostrarAlerta(
-        'Error',
-        'No se pudo contactar al servidor: $e',
-        Colors.red,
-      );
+      _mostrarAlerta('Error', 'Acceso denegado o archivo dañado.', Colors.red);
     } finally {
       setState(() => _estaCargando = false);
     }
   }
 
-  Future<void> _firmarDocumento() async {
-    if (sigX == null ||
-        _pdfController.text.isEmpty ||
-        _certificateChain == null)
-      return;
+  // --- PROCESAMIENTO EN LOTE CON POSICIONES INDIVIDUALES ---
+  Future<void> _firmarLoteDocumentos() async {
+    if (_loteArchivos.isEmpty || _certificateChain == null) return;
 
     setState(() => _estaCargando = true);
+    int contadorExitos = 0;
 
     try {
-      final List<int> pdfBytes = await File(_pdfController.text).readAsBytes();
-      final PdfDocument document = PdfDocument(inputBytes: pdfBytes);
-      final PdfPage page = document.pages[sigPage! - 1];
-
-      final PdfSignature signature = PdfSignature(
-        contactInfo: 'Sistema SOFII - FII',
-        locationInfo: 'Caracas, Venezuela',
-        reason: 'Firma Digital Autorizada',
-      );
-
-      signature.addExternalSigner(
-        FirmadorECDSA(_certController.text, _passController.text),
-        _certificateChain!,
-      );
-
-      double startX = sigX! - (sigWidth / 2);
-      double startY = sigY! - (sigHeight / 2);
-
-      if (startX < 0) startX = 0;
-      if (startY < 0) startY = 0;
-
-      final PdfSignatureField signatureField = PdfSignatureField(
-        page,
-        'Firma_SOFII_${DateTime.now().millisecondsSinceEpoch}',
-        bounds: Rect.fromLTWH(startX, startY, sigWidth, sigHeight),
-      );
-
-      String nombre = _extraerAtributo(_certFullSubject, 'CN');
-      String organizacion = _extraerAtributo(_certFullSubject, 'O');
-      String cargo = _extraerCargo(_certFullSubject);
-
-      DateTime now = DateTime.now();
-      String fechaHora =
-          "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
-
-      String textoVisual = nombre;
-      if (organizacion.isNotEmpty) textoVisual += '\n$organizacion';
-      if (cargo.isNotEmpty) textoVisual += '\n$cargo';
-      textoVisual += '\n$fechaHora';
-
-      signatureField.appearance.normal.graphics?.drawString(
-        textoVisual,
-        PdfStandardFont(PdfFontFamily.helvetica, 11),
-        brush: PdfSolidBrush(PdfColor(0, 0, 0)),
-        bounds: Rect.fromLTWH(0, 0, sigWidth, sigHeight),
-        format: PdfStringFormat(
-          alignment: PdfTextAlignment.center,
-          lineAlignment: PdfVerticalAlignment.middle,
-        ),
-      );
-
-      signatureField.signature = signature;
-      document.form.fields.add(signatureField);
-
-      final List<int> bytesFirmados = await document.save();
-      document.dispose();
-
-      // --- ¡NUEVA LÓGICA DE PERMISOS AUTOMÁTICOS PARA ANDROID 11 a 15! ---
-      if (Platform.isAndroid) {
-        if (!await Permission.manageExternalStorage.isGranted) {
-          var status = await Permission.manageExternalStorage.request();
-          if (!status.isGranted) {
-            _mostrarAlerta(
-              'Permiso Denegado',
-              'Para guardar el PDF firmado, Android requiere que le dé permiso a la aplicación. Intente firmar nuevamente y acepte el permiso.',
-              Colors.red,
-            );
-            setState(() => _estaCargando = false);
-            return;
-          }
-        }
+      if (Platform.isAndroid &&
+          !await Permission.manageExternalStorage.isGranted) {
+        await Permission.manageExternalStorage.request();
       }
-      // -------------------------------------------------------------------
 
-      Directory dirFirmados = Directory(
-        '/storage/emulated/0/Download/Firmados',
-      );
-      if (!await dirFirmados.exists()) {
+      String rutaBase = Platform.isAndroid
+          ? '/storage/emulated/0/Download/Firmados'
+          : '${(await getApplicationDocumentsDirectory()).path}/Firmados';
+      Directory dirFirmados = Directory(rutaBase);
+      if (!await dirFirmados.exists())
         await dirFirmados.create(recursive: true);
-      }
 
-      String nombreOriginal = _pdfController.text.split('/').last;
-      String nombreSinExt = nombreOriginal.replaceAll('.pdf', '');
-      String rutaGuardado = '${dirFirmados.path}/${nombreSinExt}_firmado.pdf';
+      for (var doc in _loteArchivos) {
+        final List<int> pdfBytes = await File(doc['path']).readAsBytes();
+        final PdfDocument document = PdfDocument(inputBytes: pdfBytes);
+        final PdfPage page = document.pages[doc['page'] - 1];
 
-      File archivoFirmado = File(rutaGuardado);
-      await archivoFirmado.writeAsBytes(bytesFirmados);
+        final PdfSignature signature = PdfSignature(
+          contactInfo: 'Sistema SOFII - FII',
+          locationInfo: 'Caracas, Venezuela',
+          reason: 'Firma Digital Autorizada',
+        );
 
-      setState(() {
-        _puedeFirmar = false;
-        if (!_tieneHuellaGuardada) {
-          _passController.clear();
+        signature.addExternalSigner(
+          FirmadorECDSA(_certController.text, _passController.text),
+          _certificateChain!,
+        );
+
+        final PdfSignatureField signatureField = PdfSignatureField(
+          page,
+          'Firma_SOFII_${DateTime.now().millisecondsSinceEpoch}',
+          bounds: Rect.fromLTWH(
+            doc['x'] - (sigWidth / 2),
+            doc['y'] - (sigHeight / 2),
+            sigWidth,
+            sigHeight,
+          ),
+        );
+
+        if (_imgController.text.isNotEmpty) {
+          final Uint8List imgBytes = await File(
+            _imgController.text,
+          ).readAsBytes();
+          signatureField.appearance.normal.graphics?.drawImage(
+            PdfBitmap(imgBytes),
+            Rect.fromLTWH(0, 0, sigWidth, sigHeight),
+          );
+        } else {
+          String nombre = _extraerAtributo(_certFullSubject, 'CN');
+          String cargo = _extraerCargo(_certFullSubject);
+          String fecha = DateTime.now().toString().substring(0, 19);
+          signatureField.appearance.normal.graphics?.drawString(
+            "$nombre\n$cargo\n$fecha",
+            PdfStandardFont(PdfFontFamily.helvetica, 11),
+            brush: PdfSolidBrush(PdfColor(0, 0, 0)),
+            bounds: Rect.fromLTWH(0, 0, sigWidth, sigHeight),
+            format: PdfStringFormat(
+              alignment: PdfTextAlignment.center,
+              lineAlignment: PdfVerticalAlignment.middle,
+            ),
+          );
         }
-      });
+
+        signatureField.signature = signature;
+        document.form.fields.add(signatureField);
+        final List<int> bytesFirmados = await document.save();
+        document.dispose();
+
+        String nombreArchivo = doc['path']
+            .split('/')
+            .last
+            .replaceAll('.pdf', '');
+        await File(
+          '${dirFirmados.path}/${nombreArchivo}_firmado.pdf',
+        ).writeAsBytes(bytesFirmados);
+        contadorExitos++;
+      }
 
       _mostrarAlerta(
-        '¡Firma Exitosa!',
-        'Documento guardado en:\n\n$rutaGuardado',
+        'Firma Masiva Exitosa',
+        'Se procesaron $contadorExitos documentos correctamente.',
         Colors.green,
       );
+      setState(() => _loteArchivos.clear());
+      _pdfController.clear();
     } catch (e) {
-      _mostrarAlerta(
-        'Error al Firmar',
-        'Problema criptográfico: $e',
-        Colors.red,
-      );
+      _mostrarAlerta('Error en Lote', 'Ocurrió un error: $e', Colors.red);
     } finally {
       setState(() => _estaCargando = false);
     }
@@ -579,33 +462,17 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 20.0,
-              ),
+              padding: const EdgeInsets.all(16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Image.asset(
-                    'assets/img/logo_csice.png',
-                    height: 50,
-                    fit: BoxFit.contain,
-                  ),
-                  Image.asset(
-                    'assets/img/SOFII.png',
-                    height: 50,
-                    fit: BoxFit.contain,
-                  ),
-                  Image.asset(
-                    'assets/img/fii.png',
-                    height: 50,
-                    fit: BoxFit.contain,
-                  ),
+                  Image.asset('assets/img/logo_csice.png', height: 40),
+                  Image.asset('assets/img/SOFII.png', height: 40),
+                  Image.asset('assets/img/fii.png', height: 40),
                 ],
               ),
             ),
-            const Divider(color: Colors.grey, thickness: 0.5),
-
+            const Divider(),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20.0),
@@ -613,10 +480,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Seleccionar PDF:',
+                      'Seleccionar PDFs (Lote):',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 5),
                     Row(
                       children: [
                         Expanded(
@@ -624,8 +490,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                             controller: _pdfController,
                             readOnly: true,
                             decoration: const InputDecoration(
-                              hintText: 'Ruta del documento...',
-                              border: UnderlineInputBorder(),
+                              hintText: 'Configurar documentos...',
                             ),
                           ),
                         ),
@@ -634,27 +499,21 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                             Icons.picture_as_pdf,
                             color: Colors.red,
                           ),
-                          onPressed: _seleccionarPDF,
+                          onPressed: _seleccionarPDFs,
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
-
                     const Text(
-                      'Seleccionar certificado (.p12):',
+                      'Certificado:',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 5),
                     Row(
                       children: [
                         Expanded(
                           child: TextField(
                             controller: _certController,
                             readOnly: true,
-                            decoration: const InputDecoration(
-                              hintText: 'Ruta del certificado...',
-                              border: UnderlineInputBorder(),
-                            ),
                           ),
                         ),
                         IconButton(
@@ -664,122 +523,100 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                       ],
                     ),
                     const SizedBox(height: 20),
-
                     const Text(
-                      'Contraseña:',
+                      'Firma con Imagen (Opcional):',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 5),
-                    _tieneHuellaGuardada
-                        ? InkWell(
-                            onTap: _autenticarConHuella,
-                            child: Container(
-                              padding: const EdgeInsets.all(15),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.blue),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.fingerprint,
-                                    size: 30,
-                                    color: Colors.blue,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Tocar para validar con huella',
-                                    style: TextStyle(
-                                      color: Colors.blue,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _imgController,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              hintText: 'Firma con Imagen',
                             ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.image, color: Colors.purple),
+                          onPressed: _seleccionarImagenFirma,
+                        ),
+                        if (_imgController.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear, color: Colors.red),
+                            onPressed: () =>
+                                setState(() => _imgController.clear()),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Seguridad:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    _tieneHuellaGuardada
+                        ? ListTile(
+                            leading: const Icon(
+                              Icons.fingerprint,
+                              color: Colors.blue,
+                            ),
+                            title: const Text('Validar con huella'),
+                            onTap: _autenticarConHuella,
+                            tileColor: Colors.blue.withOpacity(0.05),
                           )
                         : TextField(
                             controller: _passController,
                             obscureText: true,
                             decoration: const InputDecoration(
-                              hintText: 'Ingrese la clave de su certificado',
-                              border: UnderlineInputBorder(),
+                              hintText: 'Contraseña',
                             ),
                           ),
                     const SizedBox(height: 40),
-
                     _estaCargando
                         ? const Center(child: CircularProgressIndicator())
-                        : Column(
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  if (!_tieneHuellaGuardada)
-                                    ElevatedButton.icon(
-                                      onPressed: _validarCertificado,
-                                      icon: const Icon(
-                                        Icons.check_circle_outline,
-                                      ),
-                                      label: const Text('Validar'),
-                                    ),
-                                  ElevatedButton.icon(
-                                    onPressed: _puedeFirmar
-                                        ? _firmarDocumento
-                                        : null,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    icon: const Icon(Icons.edit_document),
-                                    label: const Text('Firmar PDF'),
-                                  ),
-                                ],
-                              ),
-                              if (_keyType == "RSA" && _puedeFirmar)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 20),
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    height: 50,
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.orange.shade800,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Módulo de pagos SIGECOF en desarrollo...',
-                                            ),
-                                            backgroundColor: Colors.orange,
-                                          ),
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.account_balance_wallet,
-                                      ),
-                                      label: const Text(
-                                        'Validar Pagos SIGECOF',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                              if (!_tieneHuellaGuardada)
+                                ElevatedButton(
+                                  onPressed: _validarCertificado,
+                                  child: const Text('Validar'),
                                 ),
+                              ElevatedButton.icon(
+                                onPressed:
+                                    _puedeFirmar && _loteArchivos.isNotEmpty
+                                    ? _firmarLoteDocumentos
+                                    : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.edit_document),
+                                label: Text(
+                                  _loteArchivos.length > 1
+                                      ? 'Firmar Lote'
+                                      : 'Firmar PDF',
+                                ),
+                              ),
                             ],
                           ),
                   ],
                 ),
+              ),
+            ),
+            const Divider(height: 1, color: Colors.grey),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Text(
+                'Desarrollado por: Kenmerry Navarro para FIIIDT',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
               ),
             ),
           ],
@@ -791,58 +628,55 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
 class VisorPDFScreen extends StatefulWidget {
   final String rutaPdf;
-  const VisorPDFScreen({super.key, required this.rutaPdf});
+  final String titulo;
+  const VisorPDFScreen({
+    super.key,
+    required this.rutaPdf,
+    required this.titulo,
+  });
   @override
   State<VisorPDFScreen> createState() => _VisorPDFScreenState();
 }
 
 class _VisorPDFScreenState extends State<VisorPDFScreen> {
   final PdfViewerController _pdfViewerController = PdfViewerController();
-  void _confirmarPosicion(BuildContext context, double x, double y, int page) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Estampar Firma'),
-        content: Text(
-          '¿Deseas ubicar tu firma visual aquí en la página $page?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.red)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context, {'x': x, 'y': y, 'page': page});
-            },
-            child: const Text('Aceptar'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Toque donde desea firmar',
-          style: TextStyle(fontSize: 16),
-        ),
+        title: Text(widget.titulo, style: const TextStyle(fontSize: 14)),
         backgroundColor: Colors.blue.shade900,
         foregroundColor: Colors.white,
       ),
       body: SfPdfViewer.file(
         File(widget.rutaPdf),
         controller: _pdfViewerController,
-        onTap: (PdfGestureDetails details) => _confirmarPosicion(
-          context,
-          details.pagePosition.dx,
-          details.pagePosition.dy,
-          details.pageNumber,
-        ),
+        onTap: (details) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Confirmar Posición'),
+              content: const Text('¿Desea ubicar su firma aquí?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context, {
+                      'x': details.pagePosition.dx,
+                      'y': details.pagePosition.dy,
+                      'page': details.pageNumber,
+                    });
+                  },
+                  child: const Text('Aceptar'),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

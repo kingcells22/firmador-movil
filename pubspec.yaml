@@ -2,7 +2,7 @@ name: firmador_movil
 description: "A new Flutter project."
 publish_to: "none"
 
-version: 1.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: ^3.12.0-113.2.beta
@@ -14,9 +14,10 @@ dependencies:
   file_picker: ^10.3.10
   syncfusion_flutter_pdfviewer: ^32.2.9
   http: ^1.6.0
-  path_provider: ^2.1.5
+  path_provider: ^2.1.5 # <-- Indispensable para las rutas seguras en iOS
   shared_preferences: ^2.5.4
-  # --- NUEVAS LIBRERÍAS DE BIOMETRÍA Y SEGURIDAD ---
+
+  # --- LIBRERÍAS DE BIOMETRÍA Y SEGURIDAD ---
   local_auth: ^2.1.8
   flutter_secure_storage: ^9.0.0
   permission_handler: ^12.0.1
@@ -25,17 +26,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.13.1 # <-- La librería inyectada aquí
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
-  # Aquí estamos declarando nuestra carpeta de recursos para los logos
+  # Declaración de recursos para los logos institucionales
   assets:
     - assets/img/
 
 # --- CONFIGURACIÓN DEL ÍCONO DE LA APP ---
 flutter_launcher_icons:
   android: true
-  ios: false
-  image_path: "assets/img/SOFII.png" # Tomará este logo para el cajón de apps
+  ios: true # Lo activamos para que también genere el ícono en tu nuevo iPhone
+  image_path: "assets/img/SOFII.png"
