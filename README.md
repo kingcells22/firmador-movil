@@ -16,7 +16,7 @@
 ### 📸 Interfaz de la Aplicación
 
 <p align="center">
-  <img src="https://files.oaiusercontent.com/file-6lY3P9WjDovr0N9f2W48Dq9W" alt="Interfaz de Sofii Móvil v2.0" width="350px">
+  <img src="./screeshots/Sofii%20movil%20app.jpeg" alt="Interfaz de Sofii Móvil v2.0" width="350px">
 </p>
 
 ---
