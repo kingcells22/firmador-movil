@@ -1,8 +1,9 @@
 name: firmador_movil
-description: "A new Flutter project."
+description: "Sistema de Firma Digital Autorizada - FIIIDT"
 publish_to: "none"
 
-version: 2.0.0+2
+# El 2.0.1 es lo que ve el usuario. El +3 es lo que le dice a Android que es una actualización.
+version: 2.0.1+4
 
 environment:
   sdk: ^3.12.0-113.2.beta

@@ -165,6 +165,9 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
             'x': coordenadas['x'],
             'y': coordenadas['y'],
             'page': coordenadas['page'],
+            // SOLUCIÓN AL PROBLEMA: Ahora guardamos el ancho y alto escalados en el lote
+            'w': coordenadas['w'],
+            'h': coordenadas['h'],
           });
         } else {
           // Si el usuario cancela un solo visor, se aborta la carga del lote por seguridad
@@ -336,7 +339,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     }
   }
 
-  // --- PROCESAMIENTO EN LOTE CON POSICIONES INDIVIDUALES ---
+  // --- PROCESAMIENTO EN LOTE CON POSICIONES INDIVIDUALES Y FIRMAS INCREMENTALES ---
   Future<void> _firmarLoteDocumentos() async {
     if (_loteArchivos.isEmpty || _certificateChain == null) return;
 
@@ -358,6 +361,10 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
       for (var doc in _loteArchivos) {
         final List<int> pdfBytes = await File(doc['path']).readAsBytes();
+
+        // =====================================================================
+        // 🔐 SOLUCIÓN 2: CONFIGURACIÓN DE FIRMA INCREMENTAL (APPEND MODE)
+        // =====================================================================
         final PdfDocument document = PdfDocument(inputBytes: pdfBytes);
         final PdfPage page = document.pages[doc['page'] - 1];
 
@@ -372,34 +379,81 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
           _certificateChain!,
         );
 
-        final PdfSignatureField signatureField = PdfSignatureField(
-          page,
-          'Firma_SOFII_${DateTime.now().millisecondsSinceEpoch}',
-          bounds: Rect.fromLTWH(
-            doc['x'] - (sigWidth / 2),
-            doc['y'] - (sigHeight / 2),
-            sigWidth,
-            sigHeight,
-          ),
-        );
+        // =====================================================================
+        // 📏 LÓGICA DE ESCALADO TIPO PYTHON (BOUNDING BOX + OFFSET)
+        // =====================================================================
+        // 1. La "caja" máxima que el usuario eligió en la pantalla
+        double boxWidth = doc['w'] ?? 250.0;
+        double boxHeight = doc['h'] ?? 70.0;
+
+        double drawWidth = boxWidth;
+        double drawHeight = boxHeight;
+
+        // Variables para centrar la firma
+        double offsetX = 0.0;
+        double offsetY = 0.0;
+
+        PdfBitmap? bitmapImage;
 
         if (_imgController.text.isNotEmpty) {
           final Uint8List imgBytes = await File(
             _imgController.text,
           ).readAsBytes();
+          bitmapImage = PdfBitmap(imgBytes);
+
+          // Leemos la resolución real de la imagen
+          double imgW = bitmapImage.width.toDouble();
+          double imgH = bitmapImage.height.toDouble();
+
+          // 2. Encontramos la escala perfecta (Fit-to-Box sin perder calidad)
+          double ratioW = boxWidth / imgW;
+          double ratioH = boxHeight / imgH;
+          double scale = ratioW < ratioH ? ratioW : ratioH;
+
+          // Tamaño final de dibujado
+          drawWidth = imgW * scale;
+          drawHeight = imgH * scale;
+
+          // 3. Calculamos la compensación para que quede en el puro centro del toque
+          offsetX = (boxWidth - drawWidth) / 2;
+          offsetY = (boxHeight - drawHeight) / 2;
+        }
+
+        // 4. Creamos los límites aplicando el ancho base, pero compensando el centro
+        final PdfSignatureField signatureField = PdfSignatureField(
+          page,
+          'Firma_SOFII_${DateTime.now().millisecondsSinceEpoch}',
+          bounds: Rect.fromLTWH(
+            doc['x'] - (boxWidth / 2) + offsetX,
+            doc['y'] - (boxHeight / 2) + offsetY,
+            drawWidth,
+            drawHeight,
+          ),
+        );
+
+        // Estampamos el contenido
+        if (bitmapImage != null) {
           signatureField.appearance.normal.graphics?.drawImage(
-            PdfBitmap(imgBytes),
-            Rect.fromLTWH(0, 0, sigWidth, sigHeight),
+            bitmapImage,
+            Rect.fromLTWH(0, 0, drawWidth, drawHeight),
           );
         } else {
           String nombre = _extraerAtributo(_certFullSubject, 'CN');
           String cargo = _extraerCargo(_certFullSubject);
           String fecha = DateTime.now().toString().substring(0, 19);
+
+          // 💡 NUEVO: Calculamos el tamaño de la letra dinámicamente
+          // Si la altura original (70.0) usaba letra tamaño 11.0, aplicamos proporción.
+          double tamanoFuente = 11.0 * (drawHeight / 70.0);
+
           signatureField.appearance.normal.graphics?.drawString(
             "$nombre\n$cargo\n$fecha",
-            PdfStandardFont(PdfFontFamily.helvetica, 11),
+            PdfStandardFont(
+              PdfFontFamily.helvetica,
+              tamanoFuente,
+            ), // <-- Letra adaptable
             brush: PdfSolidBrush(PdfColor(0, 0, 0)),
-            bounds: Rect.fromLTWH(0, 0, sigWidth, sigHeight),
+            bounds: Rect.fromLTWH(0, 0, drawWidth, drawHeight),
             format: PdfStringFormat(
               alignment: PdfTextAlignment.center,
               lineAlignment: PdfVerticalAlignment.middle,
@@ -409,6 +463,7 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
 
         signatureField.signature = signature;
         document.form.fields.add(signatureField);
+
         final List<int> bytesFirmados = await document.save();
         document.dispose();
 
@@ -608,15 +663,29 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
             const Divider(height: 1, color: Colors.grey),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12.0),
-              child: Text(
-                'Desarrollado por: Kenmerry Navarro para FIIIDT',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                  fontStyle: FontStyle.italic,
-                ),
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Sofii Móvil — Versión 2.0.1',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blueGrey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Desarrollado por: Kenmerry Navarro para FIIIDT',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
           ],
@@ -640,6 +709,7 @@ class VisorPDFScreen extends StatefulWidget {
 
 class _VisorPDFScreenState extends State<VisorPDFScreen> {
   final PdfViewerController _pdfViewerController = PdfViewerController();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -652,11 +722,42 @@ class _VisorPDFScreenState extends State<VisorPDFScreen> {
         File(widget.rutaPdf),
         controller: _pdfViewerController,
         onTap: (details) {
+          // INTERVENCIÓN QUIRÚRGICA: Declaramos la escala de forma local en el onTap.
+          // De esta manera, cada toque inicia en 100% y mantiene su estado real dentro del diálogo.
+          double escalaLocal = 1.0;
+
           showDialog(
             context: context,
+            barrierDismissible: false, // Evita que se cierre al tocar fuera
             builder: (ctx) => AlertDialog(
-              title: const Text('Confirmar Posición'),
-              content: const Text('¿Desea ubicar su firma aquí?'),
+              title: const Text('Confirmar Posición y Tamaño'),
+              content: StatefulBuilder(
+                builder: (BuildContext context, StateSetter setDialogState) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('¿Desea ubicar su firma aquí?'),
+                      const SizedBox(height: 15),
+                      Text(
+                        'Tamaño de la firma: ${(escalaLocal * 100).toInt()}%',
+                      ),
+                      Slider(
+                        value: escalaLocal,
+                        min: 0.5, // Permite achicar la firma al 50%
+                        max: 2.0, // Permite agrandar la firma al 200%
+                        divisions: 6,
+                        label: "${(escalaLocal * 100).toInt()}%",
+                        onChanged: (double nuevoValor) {
+                          // Actualiza el estado del Slider y retiene el valor en la variable local
+                          setDialogState(() {
+                            escalaLocal = nuevoValor;
+                          });
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
@@ -669,6 +770,9 @@ class _VisorPDFScreenState extends State<VisorPDFScreen> {
                       'x': details.pagePosition.dx,
                       'y': details.pagePosition.dy,
                       'page': details.pageNumber,
+                      // Enviamos el ancho y el alto multiplicados de forma efectiva por la escala real
+                      'w': 250.0 * escalaLocal,
+                      'h': 70.0 * escalaLocal,
                     });
                   },
                   child: const Text('Aceptar'),
